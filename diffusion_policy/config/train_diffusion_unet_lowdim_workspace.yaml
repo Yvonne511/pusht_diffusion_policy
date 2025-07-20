@@ -1,6 +1,7 @@
 defaults:
   - _self_
   - task: pusht_lowdim
+  - override hydra/launcher: submitit_slurm
 
 name: train_diffusion_unet_lowdim
 _target_: diffusion_policy.workspace.train_diffusion_unet_lowdim_workspace.TrainDiffusionUnetLowdimWorkspace
@@ -137,7 +138,15 @@ hydra:
   job:
     override_dirname: ${name}
   run:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: /vast/yw4142/checkpoints/diffusion_policy/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
   sweep:
-    dir: data/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
+    dir: /vast/yw4142/checkpoints/diffusion_policy/outputs/${now:%Y.%m.%d}/${now:%H.%M.%S}_${name}_${task_name}
     subdir: ${hydra.job.num}
+  launcher:
+    submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+    nodes: 1
+    tasks_per_node: 1
+    cpus_per_task: 8
+    mem_gb: 256
+    gres: "gpu:1"
+    timeout_min: 720

@@ -12,6 +12,7 @@ sys.stderr = open(sys.stderr.fileno(), mode='w', buffering=1)
 import hydra
 from omegaconf import OmegaConf
 import pathlib
+import submitit_patch
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
 
 # allows arbitrary python code execution in configs using the ${eval:''} resolver
