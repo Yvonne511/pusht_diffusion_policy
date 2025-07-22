@@ -3,7 +3,8 @@ import torch
 import numpy as np
 import copy
 from diffusion_policy.common.pytorch_util import dict_apply
-from diffusion_policy.common.replay_buffer import ReplayBuffer
+# from diffusion_policy.common.replay_buffer import ReplayBuffer
+from diffusion_policy.common.replay_buffer_ours import ReplayBuffer
 from diffusion_policy.common.sampler import (
     SequenceSampler, get_val_mask, downsample_mask)
 from diffusion_policy.model.common.normalizer import LinearNormalizer
@@ -23,7 +24,7 @@ class PushTLowdimDataset(BaseLowdimDataset):
             max_train_episodes=None
             ):
         super().__init__()
-        self.replay_buffer = ReplayBuffer.copy_from_path(
+        self.replay_buffer = ReplayBuffer.copy_from_path_ours(
             zarr_path, keys=[obs_key, state_key, action_key])
 
         val_mask = get_val_mask(
@@ -78,13 +79,13 @@ class PushTLowdimDataset(BaseLowdimDataset):
     def _sample_to_data(self, sample):
         keypoint = sample[self.obs_key]
         state = sample[self.state_key]
-        agent_pos = state[:,:2]
-        obs = np.concatenate([
-            keypoint.reshape(keypoint.shape[0], -1), 
-            agent_pos], axis=-1)
+        # agent_pos = state[:,:2]
+        # obs = np.concatenate([
+        #     keypoint.reshape(keypoint.shape[0], -1), 
+        #     agent_pos], axis=-1)
 
         data = {
-            'obs': obs, # T, D_o
+            'obs': keypoint, # T, D_o
             'action': sample[self.action_key], # T, D_a
         }
         return data
