@@ -464,33 +464,33 @@ class PushTEnv(gym.Env):
         self.use_sin_cos = use_sin_cos
 
     def reset(self):
+        seed = self._seed
         self._setup()
         if self.block_cog is not None:
             self.block.center_of_gravity = self.block_cog
         if self.damping is not None:
             self.space.damping = self.damping
-
+        
         # use legacy RandomState for compatibility
         state = self.reset_to_state
         if state is None:
-            rs = self.random_state
-
-            base_state = [
-                rs.randint(50, 450),   # agent x
-                rs.randint(50, 450),   # agent y
-                rs.randint(100, 400),  # block x
-                rs.randint(100, 400),  # block y
-            ]   
-            angle = rs.randn() * 2 * np.pi - np.pi
+            rs = np.random.RandomState(seed=seed)
+            state = np.array([
+                rs.randint(50, 450), rs.randint(50, 450),
+                rs.randint(100, 400), rs.randint(100, 400),
+                rs.randn() * 2 * np.pi - np.pi
+                ])
+            
+            angle = state[-1]
             if self.use_sin_cos:
                 angle_vals = [np.sin(angle), np.cos(angle)]  # 2 values
             else:
                 angle_vals = [angle]  # keep it as 1-element list
             
             if self.with_velocity:
-                state = np.array(base_state + angle_vals + [0, 0], dtype=np.float32)
+                state = np.concatenate([state[:-1], angle_vals, [0, 0]]).astype(np.float32)
             else:
-                state = np.array(base_state + angle_vals, dtype=np.float32)
+                state = np.concatenate([state[:-1], angle_vals]).astype(np.float32)
         self._set_state(state)
 
         self.coverage_arr = []
@@ -759,25 +759,21 @@ class PushTEnv(gym.Env):
         self.space.damping = 0
         self.teleop = False
         self.render_buffer = list()
-
+        
         # Add walls.
         walls = [
             self._add_segment((5, 506), (5, 5), 2),
             self._add_segment((5, 5), (506, 5), 2),
             self._add_segment((506, 5), (506, 506), 2),
-            self._add_segment((5, 506), (506, 506), 2),
+            self._add_segment((5, 506), (506, 506), 2)
         ]
         self.space.add(*walls)
 
         # Add agent, block, and goal zone.
         self.agent = self.add_circle((256, 400), 15)
-        # self.block = self.add_tee((256, 300), 0)
-        self.block = self.add_shape(self.shape, (256, 300), 0, color=self.color, scale=40)
-        if self.with_target:
-            self.goal_color = pygame.Color("LightGreen")
-        else:
-            self.goal_color = pygame.Color("White")
-        self.goal_pose = np.array([256, 256, np.pi / 4])  # x, y, theta (in radians)
+        self.block = self.add_tee((256, 300), 0)
+        self.goal_color = pygame.Color('LightGreen')
+        self.goal_pose = np.array([256,256,np.pi/4])  # x, y, theta (in radians)
 
         # Add collision handling
         self.collision_handeler = self.space.add_collision_handler(0, 0)
@@ -785,7 +781,7 @@ class PushTEnv(gym.Env):
         self.n_contact_points = 0
 
         self.max_score = 50 * 100
-        self.success_threshold = 0.95  # 95% coverage.
+        self.success_threshold = 0.95    # 95% coverage.
 
     def _add_segment(self, a, b, radius):
         shape = pymunk.Segment(self.space.static_body, a, b, radius)
@@ -813,30 +809,18 @@ class PushTEnv(gym.Env):
         self.space.add(body, shape)
         return body
 
-    def add_tee(
-        self,
-        position,
-        angle,
-        scale=30,
-        color="LightSlateGray",
-        mask=pymunk.ShapeFilter.ALL_MASKS(),
-    ):  
-        scale=30
+    def add_tee(self, position, angle, scale=30, color='LightSlateGray', mask=pymunk.ShapeFilter.ALL_MASKS()):
         mass = 1
         length = 4
-        vertices1 = [
-            (-length * scale / 2, scale),
-            (length * scale / 2, scale),
-            (length * scale / 2, 0),
-            (-length * scale / 2, 0),
-        ]
+        vertices1 = [(-length*scale/2, scale),
+                                 ( length*scale/2, scale),
+                                 ( length*scale/2, 0),
+                                 (-length*scale/2, 0)]
         inertia1 = pymunk.moment_for_poly(mass, vertices=vertices1)
-        vertices2 = [
-            (-scale / 2, scale),
-            (-scale / 2, length * scale),
-            (scale / 2, length * scale),
-            (scale / 2, scale),
-        ]
+        vertices2 = [(-scale/2, scale),
+                                 (-scale/2, length*scale),
+                                 ( scale/2, length*scale),
+                                 ( scale/2, scale)]
         inertia2 = pymunk.moment_for_poly(mass, vertices=vertices1)
         body = pymunk.Body(mass, inertia1 + inertia2)
         shape1 = pymunk.Poly(body, vertices1)
@@ -845,9 +829,7 @@ class PushTEnv(gym.Env):
         shape2.color = pygame.Color(color)
         shape1.filter = pymunk.ShapeFilter(mask=mask)
         shape2.filter = pymunk.ShapeFilter(mask=mask)
-        body.center_of_gravity = (
-            shape1.center_of_gravity + shape2.center_of_gravity
-        ) / 2
+        body.center_of_gravity = (shape1.center_of_gravity + shape2.center_of_gravity) / 2
         body.position = position
         body.angle = angle
         body.friction = 1
