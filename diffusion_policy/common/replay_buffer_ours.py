@@ -365,61 +365,75 @@ class ReplayBuffer:
 
         data_path = Path(zarr_path)
         relative=True
-        normalize_action=dataset_cfg.normalize_action
         state_based=env_cfg.kwargs.state_based
         use_sin_cos=dataset_cfg.use_sin_cos
         action_scale=100.0
 
-        states = torch.load(data_path / "states.pth")
-        states = states.float()
-        if use_sin_cos:
-            # replace the last two dimensions with sin/cos of the last two dimensions
-            sin_cos = torch.cat(
-                [torch.sin(states[..., -1]).unsqueeze(-1), 
-                 torch.cos(states[..., -1]).unsqueeze(-1)], dim=-1
-            )
-            states = torch.cat([states[..., :-1], sin_cos], dim=-1)
-        if relative:
-            actions = torch.load(data_path / "rel_actions.pth")
-        else:
-            actions = torch.load(data_path / "abs_actions.pth")
-        actions = actions.float()
-        actions = actions / action_scale  # scaled back up in env
-        with open(data_path / "seq_lengths.pkl", "rb") as f:
-            seq_lengths = pickle.load(f)
+        all_states, all_actions, all_proprios, all_seq_lengths = [], [], [], []
 
-        shapes_file = data_path / "shapes.pkl"
-        if shapes_file.exists():
-            with open(shapes_file, 'rb') as f:
-                shapes = pickle.load(f)
-                shapes = shapes
-        else:
-            shapes = ['T'] * len(states)
+        subfolders = ['train', 'val']
+        for name in subfolders:
+            subdir = Path(zarr_path) / name
+            states = torch.load(subdir / "states.pth")
+            states = states.float()
+            if use_sin_cos:
+                # replace the last two dimensions with sin/cos of the last two dimensions
+                sin_cos = torch.cat(
+                    [torch.sin(states[..., -1]).unsqueeze(-1), 
+                    torch.cos(states[..., -1]).unsqueeze(-1)], dim=-1
+                )
+                states = torch.cat([states[..., :-1], sin_cos], dim=-1)
+            if relative:
+                actions = torch.load(subdir / "rel_actions.pth")
+            else:
+                actions = torch.load(subdir / "abs_actions.pth")
+            actions = actions.float()
+            actions = actions / action_scale  # scaled back up in env
+            with open(subdir / "seq_lengths.pkl", "rb") as f:
+                seq_lengths = pickle.load(f)
+
+            # shapes_file = data_path / "shapes.pkl"
+            # if shapes_file.exists():
+            #     with open(shapes_file, 'rb') as f:
+            #         shapes = pickle.load(f)
+            #         shapes = shapes
+            # else:
+            #     shapes = ['T'] * len(states)
+
+            proprios = states[..., :2].clone()  # For pusht, first 2 dim of states is proprio
+            # load velocities and update states and proprios
+            with_velocity = dataset_cfg.with_velocity
+            if with_velocity:
+                velocities = torch.load(subdir / "velocities.pth")
+                velocities = velocities.float()
+                states = torch.cat([states, velocities], dim=-1)
+                proprios = torch.cat([proprios, velocities], dim=-1)
+            
+            all_states.append(states)
+            all_actions.append(actions)
+            all_proprios.append(proprios)
+            all_seq_lengths += seq_lengths
+        all_states = torch.cat(all_states, dim=0)    
+        all_actions = torch.cat(all_actions, dim=0)    
+        all_proprios = torch.cat(all_proprios, dim=0)
 
         n_rollout = dataset_cfg.n_rollout
         if n_rollout:
             n = n_rollout
         else:
-            n = len(states)
+            n = len(all_states)
 
-        states = states[:n]
-        actions = actions[:n]
-        seq_lengths = seq_lengths[:n]
-        proprios = states[..., :2].clone()  # For pusht, first 2 dim of states is proprio
-        # load velocities and update states and proprios
-        with_velocity = dataset_cfg.with_velocity
-        if with_velocity:
-            velocities = torch.load(data_path / "velocities.pth")
-            velocities = velocities[:n].float()
-            states = torch.cat([states, velocities], dim=-1)
-            proprios = torch.cat([proprios, velocities], dim=-1)
+        all_states = all_states[:n]
+        all_actions = all_actions[:n]
+        all_proprios = all_proprios[:n]
+        all_seq_lengths = all_seq_lengths[:n]
         print(f"Loaded {n} rollouts")
 
-        states_flat = torch.cat([states[i, :seq_lengths[i]] for i in range(len(seq_lengths))], dim=0).numpy()
-        actions_flat = torch.cat([actions[i, :seq_lengths[i]] for i in range(len(seq_lengths))], dim=0).numpy()
-        proprios_flat = torch.cat([proprios[i, :seq_lengths[i]] for i in range(len(seq_lengths))], dim=0).numpy()
+        states_flat = torch.cat([all_states[i][:all_seq_lengths[i]] for i in range(n)], dim=0).numpy()
+        actions_flat = torch.cat([all_actions[i][:all_seq_lengths[i]] for i in range(n)], dim=0).numpy()
+        proprios_flat = torch.cat([all_proprios[i][:all_seq_lengths[i]] for i in range(n)], dim=0).numpy()
 
-        episode_ends = np.cumsum(seq_lengths)
+        episode_ends = np.cumsum(all_seq_lengths)
 
         root = {
             'data': {
