@@ -696,10 +696,9 @@ class PushTEnv(gym.Env):
 
     def seed(self, seed=None):
         if seed is None:
-            seed = np.random.randint(0, 25536)
+            seed = np.random.randint(0,25536)
         self._seed = seed
         self.np_random = np.random.default_rng(seed)
-        self.random_state = np.random.RandomState(seed)
 
     def _handle_collision(self, arbiter, space, data):
         self.n_contact_points += len(arbiter.contact_point_set.points)
