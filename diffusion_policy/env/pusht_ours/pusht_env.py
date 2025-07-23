@@ -399,11 +399,31 @@ class PushTEnv(gym.Env):
         self.action_scale = action_scale
 
         # agent_pos, block_pos, block_angle
+        # self.observation_space = spaces.Box(
+        #     low=np.array([0, 0, 0, 0, 0], dtype=np.float64),
+        #     high=np.array([ws, ws, ws, ws, np.pi * 2], dtype=np.float64),
+        #     shape=(5,),
+        #     dtype=np.float64,
+        # )
+        if with_velocity:
+            if use_sin_cos:
+                low = np.array([0, 0, 0, 0, -1, -1, -np.inf, -np.inf], dtype=np.float64)
+                high = np.array([ws, ws, ws, ws, 1, 1, np.inf, np.inf], dtype=np.float64)
+            else:
+                low = np.array([0, 0, 0, 0, 0, -np.inf, -np.inf], dtype=np.float64)
+                high = np.array([ws, ws, ws, ws, 2 * np.pi, np.inf, np.inf], dtype=np.float64)
+        else:
+            if use_sin_cos:
+                low = np.array([0, 0, 0, 0, -1, -1], dtype=np.float64)
+                high = np.array([ws, ws, ws, ws, 1, 1], dtype=np.float64)
+            else:
+                low = np.array([0, 0, 0, 0, 0], dtype=np.float64)
+                high = np.array([ws, ws, ws, ws, 2 * np.pi], dtype=np.float64)
         self.observation_space = spaces.Box(
-            low=np.array([0, 0, 0, 0, 0], dtype=np.float64),
-            high=np.array([ws, ws, ws, ws, np.pi * 2], dtype=np.float64),
-            shape=(5,),
-            dtype=np.float64,
+            low=low,
+            high=high,
+            shape=low.shape,
+            dtype=np.float64
         )
 
         # positional goal for agent
@@ -486,7 +506,8 @@ class PushTEnv(gym.Env):
             "visual": visual,
             "proprio": proprio
         }
-        return observation, state
+        obs = observation["visual"]
+        return obs
 
     def step(self, action):
         dt = 1.0 / self.sim_hz
@@ -542,7 +563,8 @@ class PushTEnv(gym.Env):
         info["max_coverage"] = max(self.coverage_arr)
         info["final_coverage"] = self.coverage_arr[-1]
 
-        return observation, reward, done, info
+        obs = observation["visual"]
+        return obs, reward, done, info
 
     def render(self, mode):
         return self._render_frame(mode)

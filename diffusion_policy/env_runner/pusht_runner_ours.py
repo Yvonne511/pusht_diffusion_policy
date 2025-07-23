@@ -8,6 +8,7 @@ import dill
 import math
 import wandb.sdk.data_types.video as wv
 from diffusion_policy.env.pusht.pusht_keypoints_env import PushTKeypointsEnv
+from diffusion_policy.env.pusht_ours.pusht_wrapper import PushTWrapper
 from diffusion_policy.gym_util.async_vector_env import AsyncVectorEnv
 # from diffusion_policy.gym_util.sync_vector_env import SyncVectorEnv
 from diffusion_policy.gym_util.multistep_wrapper import MultiStepWrapper
@@ -17,7 +18,7 @@ from diffusion_policy.policy.base_lowdim_policy import BaseLowdimPolicy
 from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.env_runner.base_lowdim_runner import BaseLowdimRunner
 
-class PushTKeypointsRunner(BaseLowdimRunner):
+class PushTRunnerOurs(BaseLowdimRunner):
     def __init__(self,
             output_dir,
             keypoint_visible_rate=1.0,
@@ -51,16 +52,24 @@ class PushTKeypointsRunner(BaseLowdimRunner):
         env_n_action_steps = n_action_steps
 
         # assert n_obs_steps <= n_action_steps
-        kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()
+        # kp_kwargs = PushTKeypointsEnv.genenerate_keypoint_manager_params()
+        import yaml
+        from omegaconf import OmegaConf
+        with open(f"diffusion_policy/config/task/pusht_ours_addon.yaml", "r") as f:
+            cfg = yaml.safe_load(f)
+        env_cfg = OmegaConf.create(cfg)
 
         def env_fn():
             return MultiStepWrapper(
                 VideoRecordingWrapper(
-                    PushTKeypointsEnv(
-                        legacy=legacy_test,
-                        keypoint_visible_rate=keypoint_visible_rate,
-                        agent_keypoints=agent_keypoints,
-                        **kp_kwargs
+                    # PushTKeypointsEnv(
+                    #     legacy=legacy_test,
+                    #     keypoint_visible_rate=keypoint_visible_rate,
+                    #     agent_keypoints=agent_keypoints,
+                    #     **kp_kwargs
+                    # ),
+                    PushTWrapper(
+                        **env_cfg.kwargs,
                     ),
                     video_recoder=VideoRecorder.create_h264(
                         fps=fps,
@@ -189,20 +198,20 @@ class PushTKeypointsRunner(BaseLowdimRunner):
                 args_list=[(x,) for x in this_init_fns])
 
             # start rollout
-            obs = env.reset()
+            obs = env.reset() # n_trails * n_obs_step * (dim*2)
             past_action = None
             policy.reset()
 
-            pbar = tqdm.tqdm(total=self.max_steps, desc=f"Eval PushtKeypointsRunner {chunk_idx+1}/{n_chunks}", 
+            pbar = tqdm.tqdm(total=self.max_steps, desc=f"Eval PushTRunnerOurs {chunk_idx+1}/{n_chunks}", 
                 leave=False, mininterval=self.tqdm_interval_sec)
             done = False
             while not done:
-                Do = obs.shape[-1] // 2
+                Do = obs.shape[-1]
                 # create obs dict
                 np_obs_dict = {
                     # handle n_latency_steps by discarding the last n_latency_steps
                     'obs': obs[...,:self.n_obs_steps,:Do].astype(np.float32),
-                    'obs_mask': obs[...,:self.n_obs_steps,Do:] > 0.5
+                    'obs_mask': np.ones_like(obs[..., :self.n_obs_steps, :Do], dtype=bool)
                 }
                 if self.past_action and (past_action is not None):
                     # TODO: not tested
